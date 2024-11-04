@@ -1,0 +1,19 @@
+{
+    "__comment": "Change to 'development' or 'staging' or 'production' as needed",
+    "environment": "production",  
+    "logging": {
+        "level": "DEBUG",
+        "handlers": [
+            {
+                "type": "StreamHandler",
+                "level": "DEBUG"  
+            },
+            {
+                "type": "FileHandler",
+                "filename": "app.log",
+                "level": "ERROR",
+                "format": "%(asctime)s [%(levelname)s] %(message)s"
+            }
+        ]
+    }
+}
