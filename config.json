@@ -1,12 +1,11 @@
 {
-    "__comment": "Change to 'development' or 'staging' or 'production' as needed",
-    "environment": "production",  
+    "environment": "production",
     "logging": {
         "level": "DEBUG",
         "handlers": [
             {
                 "type": "StreamHandler",
-                "level": "DEBUG"  
+                "level": "DEBUG"
             },
             {
                 "type": "FileHandler",
