@@ -1,24 +1,21 @@
 import logging
-import json
+import os
 import sys
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 import re
 
 app = Flask(__name__)
+
+# Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://sql:sql1245@localhost/mydatabase'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Load configuration from config.json
-def load_config():
-    with open('config.json') as config_file:
-        return json.load(config_file)
-    
-# Configure logging based on config.json
-def configure_logging(config):
-    environment = config['environment']
+# Configure logging based on the FLASH_ENVIRONMENT variable
+def configure_logging():
+    environment = os.getenv('FLASH_ENVIRONMENT', 'production')  # Default to 'production'
     log_level = logging.DEBUG if environment in ['development', 'staging'] else logging.ERROR
 
     # Clear any existing handlers
@@ -29,29 +26,23 @@ def configure_logging(config):
                         format='%(asctime)s [%(levelname)s] %(message)s')
 
     # Setup additional handlers
-    for handler in config['logging']['handlers']:
-        if handler['type'] == 'StreamHandler':
-            stream_handler = logging.StreamHandler(sys.stdout)
-            stream_handler.setLevel(logging.DEBUG)  # Show DEBUG logs in console
-            logging.getLogger().addHandler(stream_handler)
-        elif handler['type'] == 'FileHandler':
-            if environment == 'development':  # Disable file logging in development
-                continue  # Skip adding the FileHandler
-            else:
-                file_handler = logging.FileHandler(handler['filename'])
-                file_handler.setLevel(logging.ERROR)  # Only log ERROR and above to the file
-                formatter = logging.Formatter(handler['format'])  # Use the specified format
-                file_handler.setFormatter(formatter)  # Apply the format to the handler
-                logging.getLogger().addHandler(file_handler)
+    if environment == 'development':
+        logging.debug("Logging is set to DEBUG level for development.")
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setLevel(logging.DEBUG)
+        logging.getLogger().addHandler(stream_handler)
+    else:
+        logging.error("Logging is set to ERROR level for production or staging.")
+        file_handler = logging.FileHandler('app.log')
+        file_handler.setLevel(logging.ERROR)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+        file_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(file_handler)
 
-
-# Load the configuration and set up logging
-config = load_config()
-print("Current environment:", config['environment'])  # Debugging line
-configure_logging(config)
+# Load configuration and set up logging
+configure_logging()
 logging_level = logging.getLogger().getEffectiveLevel()
 print("Effective logging level:", logging.getLevelName(logging_level))  # Debugging line
-
 
 # Define the User model with an HKID field
 class User(db.Model):
@@ -82,7 +73,6 @@ def create_user():
 
     new_user = User(name=data['name'], email=data['email'], hkid=data['hkid'])
     
-    # Log information for development
     app.logger.info("Attempting to add user: %s", new_user.name)
     db.session.add(new_user)
     
@@ -107,7 +97,7 @@ def get_users():
 # Get a user by ID
 @app.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    user = User.query.get_or_404(user_id)  # Automatically returns 404 if user not found
+    user = User.query.get_or_404(user_id)
     app.logger.info("Retrieved user: %s", user.name)
     return jsonify({'id': user.id, 'name': user.name, 'email': user.email, 'hkid': user.hkid}), 200
 
