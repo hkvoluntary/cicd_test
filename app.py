@@ -18,7 +18,7 @@ class User(Base):
 
 # MySQL connection string: 'mysql+mysqlconnector://<user>:<password>@<host>:<port>/<database>'
 # Or you can use 'mysql+pymysql://<user>:<password>@<host>:<port>/<database>' with PyMySQL
-DATABASE_URL = 'mysql+mysqlconnector://sql:sql@172.17.0.3/test_db'
+DATABASE_URL = 'mysql+mysqlconnector://sql:sql1245@172.17.0.3/test_db'
 
 # Create an engine to connect to MySQL
 engine = create_engine(DATABASE_URL, echo=True)
