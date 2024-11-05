@@ -1,133 +1,66 @@
-import logging
+import json
 import os
-import sys
-from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-import re
+import logging
+from flask import Flask, jsonify
 
+# Initialize Flask app
 app = Flask(__name__)
 
-# Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://sql:sql@localhost/mydatabase'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-# Configure logging based on the FLASH_ENVIRONMENT variable
-def configure_logging():
-    environment = os.getenv('FLASH_ENVIRONMENT', 'production')  # Default to 'production'
-    log_level = logging.DEBUG if environment in ['development', 'staging'] else logging.ERROR
-
-    # Clear any existing handlers
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-
-    logging.basicConfig(level=log_level,
-                        format='%(asctime)s [%(levelname)s] %(message)s')
-
-    # Setup additional handlers
-    if environment == 'development':
-        logging.debug("Logging is set to DEBUG level for development.")
-        stream_handler = logging.StreamHandler(sys.stdout)
-        stream_handler.setLevel(logging.DEBUG)
-        logging.getLogger().addHandler(stream_handler)
-    else:
-        logging.error("Logging is set to ERROR level for production or staging.")
-        file_handler = logging.FileHandler('app.log')
-        file_handler.setLevel(logging.ERROR)
-        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-        file_handler.setFormatter(formatter)
-        logging.getLogger().addHandler(file_handler)
-
-# Load configuration and set up logging
-configure_logging()
-logging_level = logging.getLogger().getEffectiveLevel()
-print("Effective logging level:", logging.getLevelName(logging_level))  # Debugging line
-
-# Define the User model with an HKID field
-class User(db.Model):
-    __tablename__ = 'user'
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    hkid = db.Column(db.String(10), unique=True, nullable=False)
-
-    @staticmethod
-    def is_valid_hkid(hkid):
-        pattern = r'^[A-Z]{1,2}[0-9]{6}\([0-9A]\)$'
-        return bool(re.match(pattern, hkid))
-
-# Create the table
-with app.app_context():
-    db.create_all()
-
-# Create a new user
-@app.route('/users', methods=['POST'])
-def create_user():
-    data = request.get_json()
-    app.logger.debug("Received data for user creation: %s", data)
+# Load configuration from config.json
+def load_config():
+    config_file_path = 'config.json'
+    if not os.path.exists(config_file_path):
+        raise FileNotFoundError(f"{config_file_path} not found.")
     
-    if not User.is_valid_hkid(data['hkid']):
-        app.logger.error("Invalid HKID format for input: %s", data)
-        return jsonify({'error': 'Invalid HKID format.'}), 400
-
-    new_user = User(name=data['name'], email=data['email'], hkid=data['hkid'])
+    with open(config_file_path, 'r') as config_file:
+        config = json.load(config_file)
     
-    app.logger.info("Attempting to add user: %s", new_user.name)
-    db.session.add(new_user)
+    # Set the Flask app configurations from JSON
+    app.config['FLASK_ENV'] = config.get('FLASK_ENV', 'production')
+    app.config['DEBUG'] = config.get('DEBUG', False)
     
-    try:
-        db.session.commit()
-        app.logger.debug("User created successfully: %s", new_user.name)
-    except Exception as e:
-        app.logger.error("Error creating user: %s", e)
-        db.session.rollback()
-        return jsonify({'error': 'User creation failed.'}), 500
+    # Set up database credentials and host from the config file
+    db_user = config.get('DATABASE_USER', 'default_user')
+    db_password = config.get('DATABASE_PASSWORD', 'default_password')
+    db_name = config.get('DATABASE_NAME', 'default_db')
+    db_host = config.get('DATABASE_HOST', 'localhost')  # Default to localhost if not provided
+    
+    # Construct the database URI (assuming PostgreSQL, modify for other DBs as needed)
+    #app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}'
+    
+    # Setup logging from config.json
+    log_config = config.get('LOGGING', {})
+    log_level = log_config.get('LEVEL', 'DEBUG').upper()
+    log_format = log_config.get('FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_filename = log_config.get('FILENAME', 'app.log')
 
-    app.logger.info("User created: %s", new_user.name)
-    return jsonify({'message': 'User created successfully!'}), 201
+    logging.basicConfig(level=log_level, format=log_format, filename=log_filename)
+    
+    return config
 
-# Read all users
-@app.route('/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-    app.logger.info("Retrieved all users")
-    return jsonify([{'id': user.id, 'name': user.name, 'email': user.email, 'hkid': user.hkid} for user in users]), 200
+# Load the config at app startup
+config = load_config()
 
-# Get a user by ID
-@app.route('/users/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    user = User.query.get_or_404(user_id)
-    app.logger.info("Retrieved user: %s", user.name)
-    return jsonify({'id': user.id, 'name': user.name, 'email': user.email, 'hkid': user.hkid}), 200
+@app.route('/')
+def home():
+    # Simple route to test the app
+    app.logger.info("Home route accessed")
+    return jsonify({
+        'message': 'Welcome to the Flask app!',
+        'flask_env': app.config['FLASK_ENV'],
+        'database_uri': app.config['SQLALCHEMY_DATABASE_URI']
+    })
 
-# Update a user
-@app.route('/users/<int:user_id>', methods=['PUT'])
-def update_user(user_id):
-    data = request.get_json()
-    user = User.query.get_or_404(user_id)
-
-    app.logger.debug("Received data for user update: %s", data)
-
-    if not User.is_valid_hkid(data['hkid']):
-        app.logger.error("Invalid HKID format for input: %s", data)
-        return jsonify({'error': 'Invalid HKID format.'}), 400
-
-    user.name = data['name']
-    user.email = data['email']
-    user.hkid = data['hkid']
-    db.session.commit()
-    app.logger.info("User updated: %s", user.name)
-    return jsonify({'message': 'User updated successfully!'}), 200
-
-# Delete a user
-@app.route('/users/<int:user_id>', methods=['DELETE'])
-def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    app.logger.info("User deleted: %s", user.name)
-    return jsonify({'message': 'User deleted successfully!'}), 200
+@app.route('/config')
+def get_config():
+    # Route to view the loaded config settings
+    app.logger.debug("Config route accessed")
+    return jsonify({
+        'FLASK_APP': app.config['FLASK_APP'],
+        'FLASK_ENV': app.config['FLASK_ENV'],
+        'DATABASE_URI': app.config['SQLALCHEMY_DATABASE_URI'],
+        'DEBUG': app.config['DEBUG']
+    })
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=app.config['DEBUG'])
