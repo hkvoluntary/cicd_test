@@ -1,66 +1,130 @@
-import json
-import os
+import argparse
 import logging
-from flask import Flask, jsonify
+import sys
+import json
+import re
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 
-# Initialize Flask app
+# Initialize the Flask app
 app = Flask(__name__)
 
-# Load configuration from config.json
-def load_config():
-    config_file_path = 'config.json'
-    if not os.path.exists(config_file_path):
-        raise FileNotFoundError(f"{config_file_path} not found.")
-    
-    with open(config_file_path, 'r') as config_file:
-        config = json.load(config_file)
-    
-    # Set the Flask app configurations from JSON
-    app.config['FLASK_ENV'] = config.get('FLASK_ENV', 'production')
-    app.config['DEBUG'] = config.get('DEBUG', False)
-    
-    # Set up database credentials and host from the config file
-    db_user = config.get('DATABASE_USER', 'default_user')
-    db_password = config.get('DATABASE_PASSWORD', 'default_password')
-    db_name = config.get('DATABASE_NAME', 'default_db')
-    db_host = config.get('DATABASE_HOST', 'localhost')  # Default to localhost if not provided
-    
-    # Construct the database URI (assuming PostgreSQL, modify for other DBs as needed)
-    #app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{db_user}:{db_password}@{db_host}/{db_name}'
-    
-    # Setup logging from config.json
-    log_config = config.get('LOGGING', {})
-    log_level = log_config.get('LEVEL', 'DEBUG').upper()
-    log_format = log_config.get('FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_filename = log_config.get('FILENAME', 'app.log')
+# Load the configuration from config.json based on the environment
+def load_config(environment):
+    with open('config.json') as f:
+        config = json.load(f)
 
-    logging.basicConfig(level=log_level, format=log_format, filename=log_filename)
-    
+    # Get the environment-specific config, fallback to 'development' if not found
+    if environment:
+        config = config.get(environment, config.get('development'))
+
     return config
 
-# Load the config at app startup
-config = load_config()
+# Configure logging based on the environment
+def configure_logging(config):
+    environment = config.get('environment', 'development')
+    
+    if environment == 'development':
+        log_level = logging.DEBUG
+    elif environment == 'staging':
+        log_level = logging.DEBUG
+    else:  # For 'production'
+        log_level = logging.ERROR
 
-@app.route('/')
-def home():
-    # Simple route to test the app
-    app.logger.info("Home route accessed")
-    return jsonify({
-        'message': 'Welcome to the Flask app!',
-        'flask_env': app.config['FLASK_ENV'],
-        'database_uri': app.config['SQLALCHEMY_DATABASE_URI']
-    })
+    # Clear any existing handlers
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
 
-@app.route('/config')
-def get_config():
-    # Route to view the loaded config settings
-    app.logger.debug("Config route accessed")
-    return jsonify({
-        'FLASK_APP': app.config['FLASK_APP'],
-        'FLASK_ENV': app.config['FLASK_ENV'],
-        'DATABASE_URI': app.config['SQLALCHEMY_DATABASE_URI'],
-        'DEBUG': app.config['DEBUG']
-    })
+    # Set the logging basic configuration
+    logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(message)s')
 
+    # Add the correct handlers based on the environment
+    for handler_config in config['logging']['handlers']:
+        if handler_config['type'] == 'StreamHandler':
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setLevel(handler_config['level'])
+            logging.getLogger().addHandler(stream_handler)
+        elif handler_config['type'] == 'FileHandler':
+            file_handler = logging.FileHandler(handler_config['filename'])
+            file_handler.setLevel(handler_config['level'])
+            formatter = logging.Formatter(handler_config['format'])
+            file_handler.setFormatter(formatter)
+            logging.getLogger().addHandler(file_handler)
+
+# Set up command-line arguments
+def parse_args():
+    parser = argparse.ArgumentParser(description="Start Flask app with a specific environment.")
+    parser.add_argument(
+        '--env', 
+        choices=['development', 'staging', 'production'], 
+        default=None,
+        help="Specify the environment: development, staging, or production."
+    )
+    return parser.parse_args()
+
+# Initialize the database
+def initialize_database(app, config):
+    # Get the database configuration for the selected environment
+    db_config = config.get('database', {})
+
+    # Set SQLAlchemy database URI and other settings
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+mysqlconnector://{db_config['user']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['name']}"
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # Initialize the database
+    db = SQLAlchemy(app)
+    return db
+
+# Initialize app and load config
+args = parse_args()  # Parse the command-line arguments
+config = load_config(args.env)  # Load config with overridden environment if specified
+configure_logging(config)  # Set up logging based on the config
+
+# Initialize the database connection from config
+db = initialize_database(app, config)
+
+# Define the User model with an HKID field
+class User(db.Model):
+    __tablename__ = 'user'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    hkid = db.Column(db.String(10), unique=True, nullable=False)
+
+    @staticmethod
+    def is_valid_hkid(hkid):
+        pattern = r'^[A-Z]{1,2}[0-9]{6}\([0-9A]\)$'
+        return bool(re.match(pattern, hkid))
+
+# Create the table (for testing purposes)
+with app.app_context():
+    db.create_all()
+
+# Define the routes (Example)
+@app.route('/users', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    app.logger.debug("Received data for user creation: %s", data)
+    
+    if not User.is_valid_hkid(data['hkid']):
+        app.logger.error("Invalid HKID format for input: %s", data)
+        return jsonify({'error': 'Invalid HKID format.'}), 400
+
+    new_user = User(name=data['name'], email=data['email'], hkid=data['hkid'])
+    app.logger.info("Attempting to add user: %s", new_user.name)
+    db.session.add(new_user)
+    
+    try:
+        db.session.commit()
+        app.logger.debug("User created successfully: %s", new_user.name)
+    except Exception as e:
+        app.logger.error("Error creating user: %s", e)
+        db.session.rollback()
+        return jsonify({'error': 'User creation failed.'}), 500
+
+    app.logger.info("User created: %s", new_user.name)
+    return jsonify({'message': 'User created successfully!'}), 201
+
+# Run the Flask app
 if __name__ == '__main__':
-    app.run(debug=app.config['DEBUG'])
+    app.run(debug=False)
