@@ -5,19 +5,19 @@ from sqlalchemy.orm import sessionmaker
 # Define the base class for declarative models
 Base = declarative_base()
 
-# Define a simple User model
+# Define the User model
 class User(Base):
-    __tablename__ = 'users'
-
+    __tablename__ = 'users'  # This tells SQLAlchemy the name of the table
+    
+    # Specify the length for the String column
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
+    name = Column(String(100), nullable=False)  # String column with a max length of 100
     age = Column(Integer, nullable=False)
-
+    
     def __repr__(self):
         return f"<User(id={self.id}, name={self.name}, age={self.age})>"
 
-# MySQL connection string: 'mysql+mysqlconnector://<user>:<password>@<host>:<port>/<database>'
-# Or you can use 'mysql+pymysql://<user>:<password>@<host>:<port>/<database>' with PyMySQL
+# MySQL connection string
 DATABASE_URL = 'mysql+mysqlconnector://sql:sql1245@172.17.0.3/test_db'
 
 # Create an engine to connect to MySQL
