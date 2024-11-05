@@ -1,14 +1,74 @@
 {
-    "FLASK_APP": "app.py",
-    "FLASK_ENV": "development",
-    "DATABASE_USER": "your_db_user",
-    "DATABASE_PASSWORD": "your_db_password",
-    "DATABASE_NAME": "your_db_name",
-    "DATABASE_HOST": "192.168.1.100",  // Example IP address, change this
-    "DEBUG": true,
-    "LOGGING": {
-        "LEVEL": "DEBUG",
-        "FORMAT": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "FILENAME": "app.log"
+    "development": {
+        "environment": "development",
+        "logging": {
+            "handlers": [
+                {
+                    "type": "StreamHandler",
+                    "level": "DEBUG"
+                },
+                {
+                    "type": "FileHandler",
+                    "filename": "app.log",
+                    "level": "DEBUG",
+                    "format": "%(asctime)s [%(levelname)s] %(message)s"
+                }
+            ]
+        },
+        "database": {
+            "host": "127.0.0.1",
+            "port": "3306",
+            "user": "sql",
+            "password": "sql1245",
+            "name": "mydatabase"
+        }
+    },
+    "staging": {
+        "environment": "staging",
+        "logging": {
+            "handlers": [
+                {
+                    "type": "StreamHandler",
+                    "level": "DEBUG"
+                },
+                {
+                    "type": "FileHandler",
+                    "filename": "app.log",
+                    "level": "ERROR",
+                    "format": "%(asctime)s [%(levelname)s] %(message)s"
+                }
+            ]
+        },
+        "database": {
+            "host": "127.0.0.1",
+            "port": "3306",
+            "user": "sql",
+            "password": "sql1245",
+            "name": "mydatabase"
+        }
+    },
+    "production": {
+        "environment": "production",
+        "logging": {
+            "handlers": [
+                {
+                    "type": "StreamHandler",
+                    "level": "ERROR"
+                },
+                {
+                    "type": "FileHandler",
+                    "filename": "app.log",
+                    "level": "ERROR",
+                    "format": "%(asctime)s [%(levelname)s] %(message)s"
+                }
+            ]
+        },
+        "database": {
+            "host": "127.0.0.1",
+            "port": "3306",
+            "user": "sql",
+            "password": "sql1245",
+            "name": "mydatabase"
+        }
     }
 }
