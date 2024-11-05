@@ -8,7 +8,7 @@ import re
 app = Flask(__name__)
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://sql:sql1245@localhost/mydatabase'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://sql:sql@localhost/mydatabase'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
